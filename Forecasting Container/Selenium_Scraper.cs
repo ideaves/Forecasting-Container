@@ -462,11 +462,11 @@ namespace Selenium_Scraper
                         string subEltId = subElt.GetAttribute("id");
                         if (subEltId == "loginIdInput")
                         {
-                            subElt.SendKeys("ideaves");
+                            subElt.SendKeys("");
                         }
                         else if (subEltId == "passwordInput")
                         {
-                            subElt.SendKeys(".DaEa7322.");
+                            subElt.SendKeys("");
                         }
                     }
 
