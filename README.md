@@ -2,10 +2,9 @@
 
 This will require several Nuget installs, and may be difficult to rearrange into a non-VS context.
 
-DotNetSeleniumExtras.WaitHelpers
-HtmlAgilityPack
-Selenium.Support
-Selenium.WebDriver
+DotNetSeleniumExtras.WaitHelpers,
+Selenium.Support,
+Selenium.WebDriver,
 Selenium.WebDriver.ChromeDrive (not included with the previous package)
 
 TODO -
