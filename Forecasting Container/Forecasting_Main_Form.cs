@@ -1,41 +1,87 @@
-﻿using HtmlAgilityPack;
-using OpenQA.Selenium;
+﻿using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
-using System.Web;
 using System.Windows.Forms;
-using System.Xml;
-using System.Xml.Linq;
-using System.Net;
-using System.Net.Http;
 using OpenQA.Selenium.Support.UI;
 using SeleniumExtras.WaitHelpers;
 using System.IO;
-using Futures_Contract_Helpers;
+using FuturesHelpers;
 using System.Drawing;
 using System.Windows.Forms.DataVisualization.Charting;
 using System.Diagnostics;
+using System.Configuration;
+using System.Web.UI;
 
-namespace Selenium_Scraper
+namespace Forecasting_Dashboard
 {
+    class ForecastingDashboardConfig
+    {
+        public string RootPythonPredictionScriptPath;
+
+        public int ModelsCount;
+
+        // Application data for predicting and normal operations
+        public string TargetHistoricalFileStore;
+
+        public string TargetCurrentBarsAndLags;
+
+        public string PythonPredictionScriptFile;
+
+        public string SourcePythonPredictionOutputFile;
+
+        public string PythonExecutablePath;
+
+        public string ChromeExecutablePath;
+
+        public string RootSymbolBeingPredicted;
+
+        public string QuoteFrameEmbeddedDisplayUrl;
+
+        public string XPathToRenderedLastPriceElement;
+
+        public string XPathToRenderedAskPriceElement;
+
+        public string XPathToRenderedBidPriceElement;
+
+        public string XPathToRenderedVolumeElement;
+
+        public string StartLoginUrl;
+
+        public string LoginIdElementId;
+
+        public string LoginIDValue;
+
+        public string LoginActionElementId;
+
+        public string PasswordElementId;
+
+        public string PasswordValue;
+
+        public List<string> RootSymbolsList;
+    }
+
     public partial class Form1 : Form
     {
         public Form1()
         {
             InitializeComponent();
-            foreach (string rootSym in new string[] { "ES", "EC", "GC", "US", "BTC", "NQ" })
+
+            ConfigureApp();
+
+            foreach (string rootSym in Config.RootSymbolsList)
             {
-                Symbols.Add(new FuturesPrice(FuturesContractHelpers.GetFrontContract(DateTime.Now, rootSym).Item2.Symbol));
-                Symbols.Add(new FuturesPrice(FuturesContractHelpers.GetSecondContract(DateTime.Now, rootSym).Item2.Symbol));
+                Symbols.Add(new FuturesPrice(FuturesHelpers.FuturesHelpers.GetFrontContract(DateTime.Now, rootSym).Item2.Symbol));
+                Symbols.Add(new FuturesPrice(FuturesHelpers.FuturesHelpers.GetSecondContract(DateTime.Now, rootSym).Item2.Symbol));
             }
             CurrentPredictionInputSet = new Tuple<DateTime, FuturesPrice[]>[Symbols.Count];
 
-            for (int i = 0; i < ModelsCount; i++)
+            PredictorSeries = new Series[Config.ModelsCount];
+
+            for (int i = 0; i < Config.ModelsCount; i++)
             {
                 PredictorSeries[i] = new Series(""+i)
                 {
@@ -63,29 +109,69 @@ namespace Selenium_Scraper
 
         }
 
-        ChromeDriver Browser;
+        Configuration ConfigFile = ConfigurationManager.OpenExeConfiguration(ConfigurationUserLevel.None);
 
-        string SessionID = "";
-
-        string TargetHistoricalFileStore = @"C:\Users\ideav\Documents\PythonWork\FiveFactor\5MinuteBars.csv";
-
-        string TargetCurrentBarsAndLags = @"C:\Users\ideav\Documents\PythonWork\FiveFactor\CurrentBars.csv";
-
-        string PythonPredictionScriptFile = @"C:\Users\ideav\Documents\PythonWork\FiveFactor\ES_FiveFactor_FrontOnly.py";
-        string PythonPredictionScriptDirectory = @"C:\Users\ideav\Documents\PythonWork\FiveFactor";
-
-        string SourcePythonPredictionOutputFile = @"C:\Users\ideav\Documents\PythonWork\FiveFactor\PythonOutput_ES_FiveFactor_FrontOnly.csv";
+        ForecastingDashboardConfig Config = new ForecastingDashboardConfig();
 
         List<FuturesPrice> Symbols = new List<FuturesPrice>();
 
         Tuple<DateTime, FuturesPrice[]>[] CurrentPredictionInputSet;
 
-        static int ModelsCount = 5;
-        Series[] PredictorSeries = new Series[ModelsCount];
+        Timer StartPredictingTimer = null;
+
+        Timer RepeatedPredictingTimer = null;
+
+        Timer PickupPythonPredictionResultTimer = null;
+
+        // Selenium/web information for scraping and data collection
+        ChromeDriver Browser;
+
+        string SessionID = "";
+
+        Timer StartCollectingTimer = null;
+
+        Timer RepeatedCollectingTimer = null;
+
+        // Chart and display information for presenting predictions
+        Series[] PredictorSeries;
+
         Series PriceDisplay = new Series();
 
         Color[] PredictionPriorityColors = new Color[20];
 
+
+
+
+        private void ConfigureApp()
+        {
+            AppSettingsSection appSettings = ConfigFile.AppSettings;
+
+            KeyValueConfigurationCollection settings = appSettings.Settings;
+
+            Config.ChromeExecutablePath = ConfigurationManager.AppSettings.Get("ChromeExecutablePath");
+            Config.RootPythonPredictionScriptPath = ConfigurationManager.AppSettings.Get("RootPythonPredictionScriptPath");
+            Config.LoginIdElementId = ConfigurationManager.AppSettings.Get("LoginIdElementId");
+            Config.LoginIDValue = ConfigurationManager.AppSettings.Get("LoginIDValue");
+            Config.LoginActionElementId = ConfigurationManager.AppSettings.Get("LoginActionElementId");
+            Int32.TryParse(ConfigurationManager.AppSettings.Get("ModelsCount"), out Config.ModelsCount);
+            Config.PasswordElementId = ConfigurationManager.AppSettings.Get("PasswordElementId");
+            Config.PasswordValue = ConfigurationManager.AppSettings.Get("PasswordValue");
+            Config.PythonExecutablePath = ConfigurationManager.AppSettings.Get("PythonExecutablePath");
+            Config.PythonPredictionScriptFile = Path.Combine(Config.RootPythonPredictionScriptPath, ConfigurationManager.AppSettings.Get("PythonPredictionScriptFile"));
+            Config.QuoteFrameEmbeddedDisplayUrl = ConfigurationManager.AppSettings.Get("QuoteFrameEmbeddedDisplayUrl");
+            Config.RootSymbolBeingPredicted = ConfigurationManager.AppSettings.Get("RootSymbolBeingPredicted");
+            Config.RootSymbolsList = ConfigurationManager.AppSettings.Get("RootSymbolsList").Split(new char[] { ',' }).ToList();
+            Config.StartLoginUrl = ConfigurationManager.AppSettings.Get("StartLoginUrl");
+            Config.SourcePythonPredictionOutputFile = Path.Combine(Config.RootPythonPredictionScriptPath, ConfigurationManager.AppSettings.Get("SourcePythonPredictionOutputFile"));
+            Config.TargetCurrentBarsAndLags = Path.Combine(Config.RootPythonPredictionScriptPath, ConfigurationManager.AppSettings.Get("TargetCurrentBarsAndLags"));
+            Config.TargetHistoricalFileStore = Path.Combine(Config.RootPythonPredictionScriptPath, ConfigurationManager.AppSettings.Get("TargetHistoricalFileStore"));
+            Config.XPathToRenderedAskPriceElement = ConfigurationManager.AppSettings.Get("XPathToRenderedAskPriceElement");
+            Config.XPathToRenderedLastPriceElement = ConfigurationManager.AppSettings.Get("XPathToRenderedLastPriceElement");
+            Config.XPathToRenderedBidPriceElement = ConfigurationManager.AppSettings.Get("XPathToRenderedBidPriceElement");
+            Config.XPathToRenderedVolumeElement = ConfigurationManager.AppSettings.Get("XPathToRenderedVolumeElement");
+        }
+
+        // Start predictions - start prediction timer -> repeat prediction timer -> pick up predictions.
         private void button1_Click(object sender, EventArgs e)
         {
             if ((RepeatedPredictingTimer != null && RepeatedPredictingTimer.Enabled) || (StartPredictingTimer != null && StartPredictingTimer.Enabled))
@@ -101,12 +187,14 @@ namespace Selenium_Scraper
                 return;
             }
 
-            // Go get the damn record of previously recorded price action, to start with.
-            // This is the only way the python script can have the CurrentBars.csv input file it needs,
-            // without waiting twelve periods for any useful predictions to change from the output file.
-            string pythonOutput = File.ReadAllText(TargetHistoricalFileStore);
+            // Erghh!   Go get the damn record of previously recorded price action, to start with.
+            // This is the only way the python script can have the CurrentBars.csv input file it needs
+            // in memory without waiting twelve periods for any useful predictions to change from the
+            // output file.
+            string pythonOutput = File.ReadAllText(Config.TargetHistoricalFileStore);
             string[] lines = pythonOutput.Split(new string[] { "\n", "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
-            string[] lastLines = lines.Skip(lines.Length-144).ToArray();
+            // NumLags x number of archived data in the file store for each time slice, i.e. 12 x 12
+            string[] lastLines = lines.Skip(lines.Length-144).ToArray(); 
             pythonOutput = null;
             lines = null;
             int timeSliceIdx = 0;
@@ -136,7 +224,7 @@ namespace Selenium_Scraper
                     CurrentPredictionInputSet[timeSliceIdx].Item2[withinSliceIdx++] = new FuturesPrice(elts[0]) { LastPrice = price };
                 }
             }
-            using (StreamWriter tFile = File.CreateText(TargetCurrentBarsAndLags))
+            using (StreamWriter tFile = File.CreateText(Config.TargetCurrentBarsAndLags))
             {
                 foreach (string lastLine in lastLines)
                 {
@@ -144,6 +232,7 @@ namespace Selenium_Scraper
                 }
             }
 
+            // Start on the next five minute clock stroke, plus 10 seconds.
             if (((int)(now.Minute / 5) + 1) * 5 == 60)
             {
                 if (now.Hour == 23 && ((int)(now.Minute / 5) + 1) * 5 == 60)
@@ -177,42 +266,36 @@ namespace Selenium_Scraper
             RepeatedPredictingTimer.Enabled = true;
             RepeatedPredictingTimer.Tick += new EventHandler(MyPredictionTimer_Continue);
             RepeatedPredictingTimer.Start();
-            // Payload - start the prediction script asynchronously
+            // Payload - start the prediction run script asynchronously
             runPythonPredictionScript();
             PickupPythonPredictionResultTimer = new Timer();
-            PickupPythonPredictionResultTimer.Interval = 30000; // Python script estimated run time
+            PickupPythonPredictionResultTimer.Interval = 30000; // Python run script estimated run time
             PickupPythonPredictionResultTimer.Enabled = true;
             PickupPythonPredictionResultTimer.Tick += new EventHandler(pickUpLastPredictionResult);
         }
 
         private void MyPredictionTimer_Continue(object sender, EventArgs e)
         {
-            // Payload - start the prediction script asynchronously
+            // Payload - start the prediction run script asynchronously
             runPythonPredictionScript();
             PickupPythonPredictionResultTimer = new Timer();
-            PickupPythonPredictionResultTimer.Interval = 30000; // Python script estimated run time
+            PickupPythonPredictionResultTimer.Interval = 30000; // Python run script estimated run time
             PickupPythonPredictionResultTimer.Enabled = true;
             PickupPythonPredictionResultTimer.Tick += new EventHandler(pickUpLastPredictionResult);
         }
 
-        Timer StartPredictingTimer = null;
-
-        Timer RepeatedPredictingTimer = null;
-
-        Timer PickupPythonPredictionResultTimer = null;
-
         private void runPythonPredictionScript()
         {
             var psi = new ProcessStartInfo();
-            psi.FileName = @"C:\Users\ideav\AppData\Local\Programs\Python\Python38\python.exe"; // or any python environment
+            psi.FileName = Config.PythonExecutablePath; // or any other python environment
 
-            psi.Arguments = $"\"{PythonPredictionScriptFile}\"";
+            psi.Arguments = $"\"{Config.PythonPredictionScriptFile}\"";
 
             psi.UseShellExecute = false;
             psi.CreateNoWindow = true;
             psi.RedirectStandardOutput = true;
             psi.RedirectStandardError = true;
-            psi.WorkingDirectory = PythonPredictionScriptDirectory;
+            psi.WorkingDirectory = Config.RootPythonPredictionScriptPath;
 
             string output;
             string errors;
@@ -228,7 +311,7 @@ namespace Selenium_Scraper
             PickupPythonPredictionResultTimer.Enabled = false;
             PickupPythonPredictionResultTimer = null;
 
-            string pythonOutput = File.ReadAllText(SourcePythonPredictionOutputFile);
+            string pythonOutput = File.ReadAllText(Config.SourcePythonPredictionOutputFile);
             Tuple<double, double>[] pythonPredictions = new Tuple<double, double>[PredictorSeries.Count()];
             int lineIdx = 0;
             foreach (string line in pythonOutput.Split(new char[] { '\n' }))
@@ -258,11 +341,7 @@ namespace Selenium_Scraper
                 pythonPredictions[lineIdx++] = new Tuple<double, double>(pred, rsq);
             }
 
-            //this.chart1.ChartAreas["ChartArea1"].Position.X = 10; 
-            //this.chart1.ChartAreas["ChartArea1"].Position.Y = 0;
-            //this.chart1.ChartAreas["ChartArea2"].Position.X = 0;
-            //this.chart1.ChartAreas["ChartArea2"].Position.Y = 50;
-            // Payload
+            // Payload - the prediction model outputs that were dropped by the run script
             int pIdx = 0;
             foreach (Series series in PredictorSeries)
             {
@@ -287,12 +366,11 @@ namespace Selenium_Scraper
                 series.LegendText = pythonPredictions[pIdx].Item2.ToString();
                 pIdx++;
             }
-            Random rand = new Random();
 
             List<FuturesPrice> mostRecentSnapshot = new List<FuturesPrice>();
             foreach (FuturesPrice snapshot in Symbols)
             {
-                if (snapshot.Symbol.StartsWith("ES"))
+                if (snapshot.Symbol.StartsWith(Config.RootSymbolBeingPredicted))
                 {
                     mostRecentSnapshot.Add(snapshot);
                 }
@@ -311,6 +389,7 @@ namespace Selenium_Scraper
             }
         }
 
+        // The authorized scrapes, proper
         private void takeLastPriceSnapshot()
         {
             try
@@ -319,16 +398,16 @@ namespace Selenium_Scraper
                 if (Browser != null && SessionID != null && SessionID != "")
                 {
                     WebDriverWait waitForTest = new WebDriverWait(Browser, new TimeSpan(300000000));
-                    Browser.Navigate().GoToUrl("https://www.streetsmartcentral.com/OXNetTools/Quote/QuoteFrame.aspx?SESSIONID=" + SessionID.ToUpper() + "&symbol=" + Symbols[0].Symbol);
+                    Browser.Navigate().GoToUrl(Config.QuoteFrameEmbeddedDisplayUrl + SessionID.ToUpper() + "&symbol=" + Symbols[0].Symbol);
                     try
                     {
-                        waitForTest.Until(ExpectedConditions.VisibilityOfAllElementsLocatedBy(By.XPath("//table[@id='quoteTable']//tbody//tr//td[@id='tdLast']")));
+                        waitForTest.Until(ExpectedConditions.VisibilityOfAllElementsLocatedBy(By.XPath(Config.XPathToRenderedLastPriceElement)));
                     }
                     catch (Exception)
                     {
                         ;
                     }
-                    testElements = Browser.FindElements(By.XPath("//table[@id='quoteTable']//tbody//tr//td[@id='tdLast']")).ToArray();
+                    testElements = Browser.FindElements(By.XPath(Config.XPathToRenderedLastPriceElement)).ToArray();
                     if (testElements.Length == 0)
                     {
                         SessionID = "";
@@ -340,7 +419,7 @@ namespace Selenium_Scraper
                 {
                     var options = new ChromeOptions()
                     {
-                        BinaryLocation = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+                        BinaryLocation = Config.ChromeExecutablePath
                     };
 
                     options.AddArguments(new List<string>() { "disable-gpu", "--disable-blink-features=AutomationControlled", "excludeSwitches=enable-automation", "userAutomationExtension=false" });
@@ -352,8 +431,7 @@ namespace Selenium_Scraper
                     Browser = new ChromeDriver(options);
                     Browser.ExecuteScript("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})", new object[] { });
 
-                    string startURL = "https://www.streetsmartcentral.com/login/CustomerLogin.aspx";
-                    LogIntoSite(startURL);
+                    LogIntoSite(Config.StartLoginUrl);
 
                     WebDriverWait waitForLogin = new WebDriverWait(Browser, new TimeSpan(300000000));
                     waitForLogin.Until(ExpectedConditions.VisibilityOfAllElementsLocatedBy(By.XPath("//frame[@src]")));
@@ -374,22 +452,22 @@ namespace Selenium_Scraper
                         symbol.LastPrice = Double.Parse(testElements[0].Text.Substring(0, testElements[0].Text.IndexOf(Environment.NewLine)));
                         continue;
                     }
-                    Browser.Navigate().GoToUrl("https://www.streetsmartcentral.com/OXNetTools/Quote/QuoteFrame.aspx?SESSIONID=" + SessionID.ToUpper() + "&symbol=" + symbol.Symbol);
-                    IWebElement[] qElements = Browser.FindElements(By.XPath("//table[@id='quoteTable']//tbody//tr//td[@id='tdLast']")).ToArray();
+                    Browser.Navigate().GoToUrl(Config.QuoteFrameEmbeddedDisplayUrl + SessionID.ToUpper() + "&symbol=" + symbol.Symbol);
+                    IWebElement[] qElements = Browser.FindElements(By.XPath(Config.XPathToRenderedLastPriceElement)).ToArray();
                     foreach (IWebElement elt in qElements)
                     {
                         string lastP = elt.Text.Substring(0, elt.Text.IndexOf(Environment.NewLine));
                         double dP;
                         if (!Double.TryParse(lastP, out dP))
                         {
-                            if (!FuturesContractHelpers.TryParseFractionalPrice(lastP, 32, out dP))
+                            if (!FuturesHelpers.FuturesHelpers.TryParseFractionalPrice(lastP, 32, out dP))
                             {
                                 ;
                             }
                         }
                         symbol.LastPrice = dP;
                     }
-                    IWebElement[] vElements = Browser.FindElements(By.XPath("//table[@id='quoteTable']//tbody//tr//td[@id='tdVolume']")).ToArray();
+                    IWebElement[] vElements = Browser.FindElements(By.XPath(Config.XPathToRenderedVolumeElement)).ToArray();
                     foreach (IWebElement elt in vElements)
                     {
                         string lastV = elt.Text.Substring(0, elt.Text.IndexOf(Environment.NewLine));
@@ -402,7 +480,7 @@ namespace Selenium_Scraper
                     }
                 }
 
-                using (StreamWriter tFile = File.AppendText(TargetHistoricalFileStore))
+                using (StreamWriter tFile = File.AppendText(Config.TargetHistoricalFileStore))
                 {
                     foreach (FuturesPrice symbol in Symbols)
                     {
@@ -460,13 +538,13 @@ namespace Selenium_Scraper
                     foreach (var subElt in inputElts)
                     {
                         string subEltId = subElt.GetAttribute("id");
-                        if (subEltId == "loginIdInput")
+                        if (subEltId == Config.LoginIdElementId)
                         {
-                            subElt.SendKeys("");
+                            subElt.SendKeys(Config.LoginIDValue);
                         }
-                        else if (subEltId == "passwordInput")
+                        else if (subEltId == Config.PasswordElementId)
                         {
-                            subElt.SendKeys("");
+                            subElt.SendKeys(Config.PasswordValue);
                         }
                     }
 
@@ -475,7 +553,7 @@ namespace Selenium_Scraper
                     foreach (var subElt in submitButtons)
                     {
                         string subEltId = subElt.GetAttribute("id");
-                        if (subEltId == "btnLogin")
+                        if (subEltId == Config.LoginActionElementId)
                         {
                             subElt.Click();
                         }
@@ -484,6 +562,7 @@ namespace Selenium_Scraper
             }
         }
 
+        // Start collecting -> Start collection timer -> repeated collection timer 
         private void button2_Click(object sender, EventArgs e)
         {
             if ((RepeatedCollectingTimer != null && RepeatedCollectingTimer.Enabled) || (StartCollectingTimer != null && StartCollectingTimer.Enabled))
@@ -521,13 +600,10 @@ namespace Selenium_Scraper
             StartCollectingTimer.Start();
         }
 
-        Timer StartCollectingTimer = null;
-
-        Timer RepeatedCollectingTimer = null;
-
+        // Drop the most recent data plus lags, to power the python prediction script.
         private void replaceCurrentBarsFile()
         {
-            using (StreamWriter tFile = File.CreateText(TargetCurrentBarsAndLags))
+            using (StreamWriter tFile = File.CreateText(Config.TargetCurrentBarsAndLags))
             {
                 for (int i =0; i < Symbols.Count; i++)
                 {
@@ -558,13 +634,10 @@ namespace Selenium_Scraper
 
         private void MyCollectionTimer_Continue(object sender, EventArgs e)
         {
-            //RepeatedTimer = new Timer();
-            //RepeatedTimer.Interval = 1000 * 60 * 5;
-            //RepeatedTimer.Tick += new EventHandler(MyTimer_Continue);
-            //RepeatedTimer.Start();
             takeLastPriceSnapshot();
             replaceCurrentBarsFile();
         }
+
 
         private void button3_Click(object sender, EventArgs e)
         {

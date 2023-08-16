@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace Selenium_Scraper
+namespace Forecasting_Dashboard
 {
     internal static class Program
     {

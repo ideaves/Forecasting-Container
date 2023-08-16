@@ -3,7 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.6.33829.357
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Forecasting Container", "Forecasting Container\Forecasting Container.csproj", "{7855E1F8-A45F-4D5F-9A54-497FE34665A9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Forecasting Dashboard", "Forecasting Container\Forecasting Dashboard.csproj", "{7855E1F8-A45F-4D5F-9A54-497FE34665A9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FuturesHelpers", "..\FuturesHelpers\FuturesHelpers\FuturesHelpers.csproj", "{72E57686-C130-41B2-B0F2-E2BF7BCA0D22}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +17,10 @@ Global
 		{7855E1F8-A45F-4D5F-9A54-497FE34665A9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7855E1F8-A45F-4D5F-9A54-497FE34665A9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7855E1F8-A45F-4D5F-9A54-497FE34665A9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{72E57686-C130-41B2-B0F2-E2BF7BCA0D22}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{72E57686-C130-41B2-B0F2-E2BF7BCA0D22}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{72E57686-C130-41B2-B0F2-E2BF7BCA0D22}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{72E57686-C130-41B2-B0F2-E2BF7BCA0D22}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

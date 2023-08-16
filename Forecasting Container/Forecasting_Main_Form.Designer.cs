@@ -3,7 +3,7 @@ using System.Windows.Forms.DataVisualization.Charting;
 using System.Windows.Forms;
 using System;
 
-namespace Selenium_Scraper
+namespace Forecasting_Dashboard
 {
     partial class Form1
     {
