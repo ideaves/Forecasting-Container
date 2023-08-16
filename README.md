@@ -23,14 +23,14 @@ price quotes that are authorized to you, and provide the URL and XPath details, 
 the automated login/authentication capability. Feel free to observe it in debug mode.
 
 -------------------------------
-This scraping application assumes that session IDs are the final authorizing token used by any iframes 
-that must be rendered from embedded form URLs in the result of the original quote request. It does not rely 
-on any further Splash rendering service, like scrapy, since it runs an actual headless Chrome browser,
-trying to operate it exactly as a human person would. No Docker required.
+The "collect" function, a scraping application, assumes that session IDs are the final authorizing token 
+used by any iframes that must be rendered from embedded form URLs in the result of the original quote request. 
+It does not rely on any further Splash rendering service, like scrapy, since it runs an actual headless Chrome 
+browser, trying to operate it exactly as a human person would. No Docker required.
 
 This scrapes at five minute intervals, synced to the 5-minute clock strokes, reasonably closely.
 
-The prediction capability also runs at five minute intervals, but it runs at a fixed interval after the
+The "predict" function also runs at five minute intervals, but it runs at a fixed interval after the
 price scraping and archiving action. That has left an artifact named "CurrentBars.csv", formatted like the 
 target archive data file, "5MinuteBars.csv". It tries to run one of two python scripts from another 
 repository, ES_FiveFactor, "ES_FiveFactor_FrontOnly.py".
