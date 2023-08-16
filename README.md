@@ -40,3 +40,10 @@ prediction script output, dropped in a local file, into the tracking display, al
 front contract price, being tracked in the chart control. The legend displays the model's r-squared.
 The point markers are colored red when relatively high, and pale/teal when nearly useless. The lines
 represent the current-time r-squared color like the markers.
+
+That python script will need to run some Tensorflow models, and needs to be set up and configured by you, 
+if you expect python prediction scripts to be helpful. So you'll need the five models, from that same
+python package as the script. That will enable it to run, but no guarantee of the model accuracy as of the 
+time you run them. You will want them to actually work well though, so the other script there runs as a 
+continuous process, attempting to use your GPU, if you have one. That attempts to improve upon the model 
+quality feeding on the data gathered by the "collect" function here.
