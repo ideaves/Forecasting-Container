@@ -345,7 +345,7 @@ namespace Forecasting_Dashboard
             int pIdx = 0;
             foreach (Series series in PredictorSeries)
             {
-                int priorityColor = (int)(pythonPredictions[pIdx].Item2 * 2000);
+                int priorityColor = (int)(pythonPredictions[pIdx].Item2 * 600);
                 if (priorityColor < 0)
                 {
                     priorityColor = 0;
@@ -387,6 +387,7 @@ namespace Forecasting_Dashboard
                     PriceDisplay.Points.RemoveAt(0);
                 }
             }
+            this.chart1.ChartAreas[1].RecalculateAxesScale();
         }
 
         // The authorized scrapes, proper
