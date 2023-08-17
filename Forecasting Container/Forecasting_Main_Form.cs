@@ -391,7 +391,7 @@ namespace Forecasting_Dashboard
         }
 
         // The authorized scrapes, proper
-        private void takeLastPriceSnapshot()
+        private bool takeLastPriceSnapshot()
         {
             try
             {
@@ -406,7 +406,7 @@ namespace Forecasting_Dashboard
                     }
                     catch (Exception)
                     {
-                        ;
+                        return false;
                     }
                     testElements = Browser.FindElements(By.XPath(Config.XPathToRenderedLastPriceElement)).ToArray();
                     if (testElements.Length == 0)
@@ -468,6 +468,12 @@ namespace Forecasting_Dashboard
                         }
                         symbol.LastPrice = dP;
                     }
+
+                    if (symbol.LastPrice == 0)
+                    {
+                        return false;
+                    }
+
                     IWebElement[] vElements = Browser.FindElements(By.XPath(Config.XPathToRenderedVolumeElement)).ToArray();
                     foreach (IWebElement elt in vElements)
                     {
@@ -512,6 +518,7 @@ namespace Forecasting_Dashboard
             {
                 ;
             }
+            return true;
         }
 
         private void LogIntoSite(string startURL)
@@ -629,13 +636,19 @@ namespace Forecasting_Dashboard
             RepeatedCollectingTimer.Interval = 1000 * 60 * 5;
             RepeatedCollectingTimer.Tick += new EventHandler(MyCollectionTimer_Continue);
             RepeatedCollectingTimer.Start();
-            takeLastPriceSnapshot();
+            if (!takeLastPriceSnapshot()) // retry once, then give up
+            {
+                takeLastPriceSnapshot();
+            }
             replaceCurrentBarsFile();
         }
 
         private void MyCollectionTimer_Continue(object sender, EventArgs e)
         {
-            takeLastPriceSnapshot();
+            if (!takeLastPriceSnapshot()) // rety once, then give up
+            {
+                takeLastPriceSnapshot();
+            }
             replaceCurrentBarsFile();
         }
 
