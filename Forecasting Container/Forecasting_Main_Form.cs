@@ -278,6 +278,10 @@ namespace Forecasting_Dashboard
         {
             // Payload - start the prediction run script asynchronously
             runPythonPredictionScript();
+            if (PickupPythonPredictionResultTimer != null)
+            {
+                return; // Already has one stacked and trying to complete. Don't lap it, then?
+            }
             PickupPythonPredictionResultTimer = new Timer();
             PickupPythonPredictionResultTimer.Interval = 30000; // Python run script estimated run time
             PickupPythonPredictionResultTimer.Enabled = true;
@@ -286,108 +290,133 @@ namespace Forecasting_Dashboard
 
         private void runPythonPredictionScript()
         {
-            var psi = new ProcessStartInfo();
-            psi.FileName = Config.PythonExecutablePath; // or any other python environment
-
-            psi.Arguments = $"\"{Config.PythonPredictionScriptFile}\"";
-
-            psi.UseShellExecute = false;
-            psi.CreateNoWindow = true;
-            psi.RedirectStandardOutput = true;
-            psi.RedirectStandardError = true;
-            psi.WorkingDirectory = Config.RootPythonPredictionScriptPath;
-
-            string output;
-            string errors;
-            using (var process = Process.Start(psi))
+            try
             {
-                output = process.StandardOutput.ReadToEnd();
-                errors = process.StandardError.ReadToEnd();
+                var psi = new ProcessStartInfo();
+                psi.FileName = Config.PythonExecutablePath; // or any other python environment
+
+                psi.Arguments = $"\"{Config.PythonPredictionScriptFile}\"";
+
+                psi.UseShellExecute = false;
+                psi.CreateNoWindow = true;
+                psi.RedirectStandardOutput = true;
+                psi.RedirectStandardError = true;
+                psi.WorkingDirectory = Config.RootPythonPredictionScriptPath;
+
+                string output;
+                string errors;
+                using (var process = Process.Start(psi))
+                {
+                    output = process.StandardOutput.ReadToEnd();
+                    errors = process.StandardError.ReadToEnd();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error in runPythonPredictionScript", ex.Message);
             }
         }
 
         private void pickUpLastPredictionResult(object sender, EventArgs e)
         {
-            PickupPythonPredictionResultTimer.Enabled = false;
-            PickupPythonPredictionResultTimer = null;
-
-            string pythonOutput = File.ReadAllText(Config.SourcePythonPredictionOutputFile);
-            Tuple<double, double>[] pythonPredictions = new Tuple<double, double>[PredictorSeries.Count()];
-            int lineIdx = 0;
-            foreach (string line in pythonOutput.Split(new char[] { '\n' }))
+            try
             {
-                if (line.Equals(""))
+                if (PickupPythonPredictionResultTimer != null)
+                // Could possibly have failed the last run through?
+                // It may have lapped itself, with excessive run time.
                 {
-                    continue;
-                }
-                string [] items = line.Split(new char[] { ',' } );
-                double pred;
-                if (!Double.TryParse(items[0], out pred))
-                {
-                    MessageBox.Show("Error - the python prediction output that was dropped does not match the assumptions coded up here. One line first item fails to parse to double.", "Error, Skipping");
-                    return;
-                }
-                double rsq;
-                if (!Double.TryParse(items[1], out rsq))
-                {
-                    MessageBox.Show("Error - the python prediction output that was dropped does not match the assumptions coded up here. One line second item fails to parse to double.", "Error, Skipping");
-                    return;
-                }
-                if (lineIdx >= pythonPredictions.Length)
-                {
-                    MessageBox.Show("Error - the python prediction output that was dropped does not match the assumptions coded up here. There are more lines than in the application predictor series.", "Error, Skipping");
-                    return;
-                }
-                pythonPredictions[lineIdx++] = new Tuple<double, double>(pred, rsq);
-            }
-
-            // Payload - the prediction model outputs that were dropped by the run script
-            int pIdx = 0;
-            foreach (Series series in PredictorSeries)
-            {
-                int priorityColor = (int)(pythonPredictions[pIdx].Item2 * 600);
-                if (priorityColor < 0)
-                {
-                    priorityColor = 0;
-                }
-                if (priorityColor >= 20)
-                {
-                    priorityColor = 19;
-                }
-                series.Points.Add(pythonPredictions[pIdx].Item1);
-                series.Points.Last().MarkerStyle = MarkerStyle.Diamond;
-                series.Points.Last().MarkerSize = 10;
-                series.Points.Last().MarkerColor = PredictionPriorityColors[priorityColor];
-                if (series.Points.Count > 100)
-                {
-                    series.Points.RemoveAt(0);
-                }
-                series.Color = PredictionPriorityColors[priorityColor];
-                series.LegendText = pythonPredictions[pIdx].Item2.ToString();
-                pIdx++;
-            }
-
-            List<FuturesPrice> mostRecentSnapshot = new List<FuturesPrice>();
-            foreach (FuturesPrice snapshot in Symbols)
-            {
-                if (snapshot.Symbol.StartsWith(Config.RootSymbolBeingPredicted))
-                {
-                    mostRecentSnapshot.Add(snapshot);
+                    PickupPythonPredictionResultTimer.Enabled = false;
+                    PickupPythonPredictionResultTimer = null;
                 }
                 else
                 {
-                    break;
+                    return;
                 }
-            }
-            if (mostRecentSnapshot.Count() > 0 && RepeatedCollectingTimer != null && RepeatedCollectingTimer.Enabled && mostRecentSnapshot.First().LastPrice.HasValue)
-            {
-                PriceDisplay.Points.Add(mostRecentSnapshot.First().LastPrice.Value);
-                if (PriceDisplay.Points.Count > 100)
+                // If so, best that can be done is keep the prediction series in sync
+                // with the price series, by repeating the existing prior prediction.
+
+                string pythonOutput = File.ReadAllText(Config.SourcePythonPredictionOutputFile);
+                Tuple<double, double>[] pythonPredictions = new Tuple<double, double>[PredictorSeries.Count()];
+                int lineIdx = 0;
+                foreach (string line in pythonOutput.Split(new char[] { '\n' }))
                 {
-                    PriceDisplay.Points.RemoveAt(0);
+                    if (line.Equals(""))
+                    {
+                        continue;
+                    }
+                    string[] items = line.Split(new char[] { ',' });
+                    double pred;
+                    if (!Double.TryParse(items[0], out pred))
+                    {
+                        MessageBox.Show("Error - the python prediction output that was dropped does not match the assumptions coded up here. One line first item fails to parse to double.", "Error, Skipping");
+                        return;
+                    }
+                    double rsq;
+                    if (!Double.TryParse(items[1], out rsq))
+                    {
+                        MessageBox.Show("Error - the python prediction output that was dropped does not match the assumptions coded up here. One line second item fails to parse to double.", "Error, Skipping");
+                        return;
+                    }
+                    if (lineIdx >= pythonPredictions.Length)
+                    {
+                        MessageBox.Show("Error - the python prediction output that was dropped does not match the assumptions coded up here. There are more lines than in the application predictor series.", "Error, Skipping");
+                        return;
+                    }
+                    pythonPredictions[lineIdx++] = new Tuple<double, double>(pred, rsq);
                 }
+
+                // Payload - the prediction model outputs that were dropped by the run script
+                int pIdx = 0;
+                foreach (Series series in PredictorSeries)
+                {
+                    int priorityColor = (int)(pythonPredictions[pIdx].Item2 * 600);
+                    if (priorityColor < 0)
+                    {
+                        priorityColor = 0;
+                    }
+                    if (priorityColor >= 20)
+                    {
+                        priorityColor = 19;
+                    }
+                    series.Points.Add(pythonPredictions[pIdx].Item1);
+                    series.Points.Last().MarkerStyle = MarkerStyle.Diamond;
+                    series.Points.Last().MarkerSize = 10;
+                    series.Points.Last().MarkerColor = PredictionPriorityColors[priorityColor];
+                    if (series.Points.Count > 100)
+                    {
+                        series.Points.RemoveAt(0);
+                    }
+                    series.Color = PredictionPriorityColors[priorityColor];
+                    series.LegendText = pythonPredictions[pIdx].Item2.ToString();
+                    pIdx++;
+                }
+
+                List<FuturesPrice> mostRecentSnapshot = new List<FuturesPrice>();
+                foreach (FuturesPrice snapshot in Symbols)
+                {
+                    if (snapshot.Symbol.StartsWith(Config.RootSymbolBeingPredicted))
+                    {
+                        mostRecentSnapshot.Add(snapshot);
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                if (mostRecentSnapshot.Count() > 0 && RepeatedCollectingTimer != null && RepeatedCollectingTimer.Enabled && mostRecentSnapshot.First().LastPrice.HasValue)
+                {
+                    PriceDisplay.Points.Add(mostRecentSnapshot.First().LastPrice.Value);
+                    if (PriceDisplay.Points.Count > 100)
+                    {
+                        PriceDisplay.Points.RemoveAt(0);
+                    }
+                }
+                this.chart1.ChartAreas[1].RecalculateAxesScale();
             }
-            this.chart1.ChartAreas[1].RecalculateAxesScale();
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error in pickUpLastPredictionResult", ex.Message);
+            }
         }
 
         // The authorized scrapes, proper
@@ -512,7 +541,7 @@ namespace Forecasting_Dashboard
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message, "Error");
+                MessageBox.Show("Error in takeLastPriceSnapshot", ex.Message);
             }
             finally
             {
