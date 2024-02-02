@@ -24,6 +24,8 @@ namespace Forecasting_Dashboard
 
         public int ModelsCount;
 
+        public int ModelsTimeSeriesLags;
+
         // Application data for predicting and normal operations
         public string TargetHistoricalFileStore;
 
@@ -77,7 +79,7 @@ namespace Forecasting_Dashboard
                 Symbols.Add(new FuturesPrice(FuturesHelpers.FuturesHelpers.GetFrontContract(DateTime.Now, rootSym).Item2.Symbol));
                 Symbols.Add(new FuturesPrice(FuturesHelpers.FuturesHelpers.GetSecondContract(DateTime.Now, rootSym).Item2.Symbol));
             }
-            CurrentPredictionInputSet = new Tuple<DateTime, FuturesPrice[]>[Symbols.Count];
+            CurrentPredictionInputSet = new Tuple<DateTime, FuturesPrice[]>[Config.ModelsTimeSeriesLags];
 
             PredictorSeries = new Series[Config.ModelsCount];
 
@@ -154,6 +156,7 @@ namespace Forecasting_Dashboard
             Config.LoginIDValue = ConfigurationManager.AppSettings.Get("LoginIDValue");
             Config.LoginActionElementId = ConfigurationManager.AppSettings.Get("LoginActionElementId");
             Int32.TryParse(ConfigurationManager.AppSettings.Get("ModelsCount"), out Config.ModelsCount);
+            Int32.TryParse(ConfigurationManager.AppSettings.Get("ModelsTimeSeriesLags"), out Config.ModelsTimeSeriesLags);
             Config.PasswordElementId = ConfigurationManager.AppSettings.Get("PasswordElementId");
             Config.PasswordValue = ConfigurationManager.AppSettings.Get("PasswordValue");
             Config.PythonExecutablePath = ConfigurationManager.AppSettings.Get("PythonExecutablePath");
@@ -193,8 +196,8 @@ namespace Forecasting_Dashboard
             // output file.
             string pythonOutput = File.ReadAllText(Config.TargetHistoricalFileStore);
             string[] lines = pythonOutput.Split(new string[] { "\n", "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
-            // NumLags x number of archived data in the file store for each time slice, i.e. 12 x 12
-            string[] lastLines = lines.Skip(lines.Length-144).ToArray(); 
+            // NumLags x number of archived data in the file store for each time slice, i.e. 12 x 20
+            string[] lastLines = lines.Skip(lines.Length-240).ToArray();
             pythonOutput = null;
             lines = null;
             int timeSliceIdx = 0;
@@ -292,6 +295,11 @@ namespace Forecasting_Dashboard
         {
             try
             {
+                if (DateTime.Now.Hour == 14 && DateTime.Now.Minute != 0)
+                {
+                    return;
+                }
+
                 var psi = new ProcessStartInfo();
                 psi.FileName = Config.PythonExecutablePath; // or any other python environment
 
@@ -321,6 +329,11 @@ namespace Forecasting_Dashboard
         {
             try
             {
+                if (DateTime.Now.Hour == 14 && DateTime.Now.Minute != 0)
+                {
+                    return;
+                }
+
                 if (PickupPythonPredictionResultTimer != null)
                 // Could possibly have failed the last run through?
                 // It may have lapped itself, with excessive run time.
@@ -369,7 +382,7 @@ namespace Forecasting_Dashboard
                 int pIdx = 0;
                 foreach (Series series in PredictorSeries)
                 {
-                    int priorityColor = (int)(pythonPredictions[pIdx].Item2 * 600);
+                    int priorityColor = (int)((pythonPredictions[pIdx].Item2 - 0.45 /*min*/) / 0.1 /*range*/ * 20/*new scale 0-20*/);
                     if (priorityColor < 0)
                     {
                         priorityColor = 0;
@@ -424,8 +437,13 @@ namespace Forecasting_Dashboard
         {
             try
             {
+                if (DateTime.Now.Hour == 14 && DateTime.Now.Minute != 0)
+                {
+                    return false;
+                }
+
                 IWebElement[] testElements = new IWebElement[0];
-                if (Browser != null && SessionID != null && SessionID != "")
+                if (Browser != null && SessionID != null && SessionID != "" && !(DateTime.Now.Hour == 2 && DateTime.Now.Minute == 0))
                 {
                     WebDriverWait waitForTest = new WebDriverWait(Browser, new TimeSpan(300000000));
                     Browser.Navigate().GoToUrl(Config.QuoteFrameEmbeddedDisplayUrl + SessionID.ToUpper() + "&symbol=" + Symbols[0].Symbol);
@@ -445,7 +463,7 @@ namespace Forecasting_Dashboard
                     }
                 }
 
-                if (Browser == null || testElements.Count() == 0)
+                if (Browser == null || testElements.Count() == 0 || (DateTime.Now.Hour == 2 && DateTime.Now.Minute == 0))
                 {
                     var options = new ChromeOptions()
                     {
@@ -465,6 +483,8 @@ namespace Forecasting_Dashboard
 
                     WebDriverWait waitForLogin = new WebDriverWait(Browser, new TimeSpan(300000000));
                     waitForLogin.Until(ExpectedConditions.VisibilityOfAllElementsLocatedBy(By.XPath("//frame[@src]")));
+                    //Browser.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(60);
+
                     IWebElement[] framesForSessionId = Browser.FindElements(By.XPath("//frame[@src]")).ToArray();
                     foreach (IWebElement frame in framesForSessionId)
                     {
@@ -475,6 +495,10 @@ namespace Forecasting_Dashboard
                     }
                 }
 
+                if (SessionID == "")
+                {
+                    return false;
+                }
                 foreach (FuturesPrice symbol in Symbols)
                 {
                     if (symbol == Symbols[0] && testElements.Count() > 0) // efficiency: if the first one worked, then skip the request, just place it.
@@ -531,13 +555,18 @@ namespace Forecasting_Dashboard
                     latestSymbolsCopy[i].LastPrice = Symbols[i].LastPrice;
                     latestSymbolsCopy[i].LastDayVolume = Symbols[i].LastDayVolume;
                 }
-                for (int i = 0; i < Symbols.Count - 1; i++)
+                for (int i = 0; i < Config.ModelsTimeSeriesLags - 1; i++)
                 {
                     CurrentPredictionInputSet[i] = CurrentPredictionInputSet[i+1];
                 }
-                CurrentPredictionInputSet[Symbols.Count - 1] = new Tuple<DateTime, FuturesPrice[]>(DateTime.Now, latestSymbolsCopy);
+                CurrentPredictionInputSet[Config.ModelsTimeSeriesLags - 1] = new Tuple<DateTime, FuturesPrice[]>(DateTime.Now, latestSymbolsCopy);
 
                 Browser.Manage().Window.Minimize();
+
+                if (DateTime.Now.Hour == 14 && DateTime.Now.Minute < 5)
+                {
+                    SessionID = "";
+                }
             }
             catch (Exception ex)
             {
@@ -642,7 +671,7 @@ namespace Forecasting_Dashboard
         {
             using (StreamWriter tFile = File.CreateText(Config.TargetCurrentBarsAndLags))
             {
-                for (int i =0; i < Symbols.Count; i++)
+                for (int i =0; i < Config.ModelsTimeSeriesLags; i++)
                 {
                     if (CurrentPredictionInputSet[i] != null)
                     {
